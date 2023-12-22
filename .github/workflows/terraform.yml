@@ -1,0 +1,83 @@
+# This workflow installs the latest version of Terraform CLI.
+# On pull request events, this workflow will run `terraform init`, `terraform fmt`, and `terraform plan`. 
+# On push events to the "main" branch, `terraform apply` will be executed.
+
+name: 'Terraform CI/CD'
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: 'Terraform CI'
+    runs-on: ubuntu-latest
+    environment: development
+
+    env:
+      PYTHON_VERSION: 3.12
+      TERRAFORM_VERSION: 1.6.6
+    # Configure AWS credentials
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: eu-west-2
+
+    # Use the Bash shell
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    # Checkout the repository
+    - name: Checkout
+      uses: actions/checkout@v3
+    
+    # Set up Python Linter
+    - name: Setup Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8
+
+    - name: Analysing the code with flake8
+      run: |
+        flake8 $(git ls-files '*.py')
+    
+    # Set up Terraform
+    - uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: terraform init
+
+    # Checks that all Terraform configuration files adhere to a canonical format
+    - name: Terraform Format
+      run: terraform fmt -check
+
+    # Generates an execution plan for Terraform
+    - name: Terraform Plan
+      run: terraform plan -input=false
+
+    # On push to "main", build or change infrastructure according to Terraform configuration files
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: terraform apply -auto-approve -input=false
+    
+    # Test API Gateway
+    - name: Test API Gateway
+      if: github.ref == 'refs/heads/main'
+      run: |
+        API_URL=$(terraform output -raw api_gateway_url)
+        echo "API_URL: $API_URL"
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL")
+        echo "HTTP Status Code: $RESPONSE"
