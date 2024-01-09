@@ -21,6 +21,6 @@ terraform {
   backend "s3" {
     bucket = "terraform-backend-aws-serverless-helloworld"
     key    = "development"
-    region = "us-east-1"
+    region = "eu-west-2"
   }
 }
